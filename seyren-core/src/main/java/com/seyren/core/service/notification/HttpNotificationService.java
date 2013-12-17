@@ -13,7 +13,7 @@
  */
 package com.seyren.core.service.notification;
 
-
+import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
@@ -27,11 +27,10 @@ import javax.inject.Named;
 import org.apache.commons.lang.StringUtils;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
-import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
-import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.util.EntityUtils;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.slf4j.Logger;
@@ -46,22 +45,23 @@ import com.seyren.core.util.config.SeyrenConfig;
 
 @Named
 public class HttpNotificationService implements NotificationService {
-    
+
     private static final Logger LOGGER = LoggerFactory.getLogger(HttpNotificationService.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    
-    private final SeyrenConfig seyrenConfig;    
-    
+
+    private final SeyrenConfig seyrenConfig;
+
     @Inject
-    public HttpNotificationService(SeyrenConfig seyrenConfig) {
+    public HttpNotificationService(final SeyrenConfig seyrenConfig) {
         this.seyrenConfig = seyrenConfig;
     }
-    
+
     @Override
-    public void sendNotification(Check check, Subscription subscription, List<Alert> alerts) throws NotificationFailedException {
-        
+    public void sendNotification(final Check check, final Subscription subscription, final List<Alert> alerts)
+            throws NotificationFailedException {
+
         String httpUrl = StringUtils.trimToNull(subscription.getTarget());
-        
+
         if (httpUrl == null) {
             LOGGER.warn("URL needs to be set before sending notifications to HTTP");
             return;
@@ -70,42 +70,50 @@ public class HttpNotificationService implements NotificationService {
         body.put("seyrenUrl", seyrenConfig.getBaseUrl());
         body.put("check", check);
         body.put("subscription", subscription);
-        body.put("alerts", alerts);        
-        body.put("preview", getPreviewImage(check)); 
-        
-        HttpClient client = new DefaultHttpClient();
-        
+        body.put("alerts", alerts);
+        body.put("preview", getPreviewImage(check));
+
+        CloseableHttpClient client = CommonNotificationUtils.getHttpClient(seyrenConfig);
+
         HttpPost post = new HttpPost(subscription.getTarget());
         try {
             HttpEntity entity = new StringEntity(MAPPER.writeValueAsString(body), ContentType.APPLICATION_JSON);
             post.setEntity(entity);
             HttpResponse response = client.execute(post);
             HttpEntity responseEntity = response.getEntity();
-            if(responseEntity!=null) {
+            if (responseEntity != null) {
                 LOGGER.info("Response : {} ", EntityUtils.toString(responseEntity));
             }
         } catch (Exception e) {
             throw new NotificationFailedException("Failed to send notification to HTTP", e);
         } finally {
             post.releaseConnection();
+            try {
+                client.close();
+            } catch (IOException e) {
+                throw new NotificationFailedException("Failed to send notification to HTTP", e);
+            }
         }
     }
-    
+
     @Override
-    public boolean canHandle(SubscriptionType subscriptionType) {
+    public boolean canHandle(final SubscriptionType subscriptionType) {
         return subscriptionType == SubscriptionType.HTTP;
     }
-   
-    private String getPreviewImage(Check check)
+
+    private String getPreviewImage(final Check check)
     {
-        return "<br /><img src=" + seyrenConfig.getGraphiteUrl() + "/render/?target=" + check.getTarget() + getTimeFromUntilString(new Date()) +
-                         "&target=alias(dashed(color(constantLine(" + check.getWarn().toString() + "),%22yellow%22)),%22warn%20level%22)&target=alias(dashed(color(constantLine(" + check.getError().toString() 
-                        + "),%22red%22)),%22error%20level%22)&width=500&height=225></img>"; 
-                
+        return "<br /><img src=" + seyrenConfig.getGraphiteUrl() + "/render/?target=" + check.getTarget()
+                + getTimeFromUntilString(new Date()) +
+                "&target=alias(dashed(color(constantLine(" + check.getWarn().toString()
+                + "),%22yellow%22)),%22warn%20level%22)&target=alias(dashed(color(constantLine("
+                + check.getError().toString()
+                + "),%22red%22)),%22error%20level%22)&width=500&height=225></img>";
+
     }
-       
-    private String getTimeFromUntilString(Date date)
-    {        
+
+    private String getTimeFromUntilString(final Date date)
+    {
         Calendar cal = Calendar.getInstance();
         SimpleDateFormat format = new SimpleDateFormat("HH:mm_yyyyMMdd");
         cal.setTime(date);
@@ -114,7 +122,7 @@ public class HttpNotificationService implements NotificationService {
         cal.add(Calendar.HOUR, 1);
         String until = format.format(cal.getTime());
 
-        return "&from=" + until.toString() + "&until=" + from.toString();   
+        return "&from=" + until.toString() + "&until=" + from.toString();
     }
-    
+
 }

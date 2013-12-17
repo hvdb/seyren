@@ -23,11 +23,10 @@ import javax.inject.Named;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.http.HttpEntity;
-import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
-import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.impl.client.CloseableHttpClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,35 +40,36 @@ import com.seyren.core.util.config.SeyrenConfig;
 
 @Named
 public class HubotNotificationService implements NotificationService {
-    
+
     private static final Logger LOGGER = LoggerFactory.getLogger(HubotNotificationService.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    
+
     private final SeyrenConfig seyrenConfig;
-    
+
     @Inject
-    public HubotNotificationService(SeyrenConfig seyrenConfig) {
+    public HubotNotificationService(final SeyrenConfig seyrenConfig) {
         this.seyrenConfig = seyrenConfig;
     }
-    
+
     @Override
-    public void sendNotification(Check check, Subscription subscription, List<Alert> alerts) throws NotificationFailedException {
+    public void sendNotification(final Check check, final Subscription subscription, final List<Alert> alerts)
+            throws NotificationFailedException {
         String hubotUrl = StringUtils.trimToNull(seyrenConfig.getHubotUrl());
-        
+
         if (hubotUrl == null) {
             LOGGER.warn("Hubot URL needs to be set before sending notifications to Hubot");
             return;
         }
-        
+
         Map<String, Object> body = new HashMap<String, Object>();
         body.put("seyrenUrl", seyrenConfig.getBaseUrl());
         body.put("check", check);
         body.put("subscription", subscription);
         body.put("alerts", alerts);
         body.put("rooms", subscription.getTarget().split(","));
-        
-        HttpClient client = new DefaultHttpClient();
-        
+
+        CloseableHttpClient client = CommonNotificationUtils.getHttpClient(seyrenConfig);
+
         HttpPost post = new HttpPost(hubotUrl + "/seyren/alert");
         try {
             HttpEntity entity = new StringEntity(MAPPER.writeValueAsString(body), ContentType.APPLICATION_JSON);
@@ -77,12 +77,18 @@ public class HubotNotificationService implements NotificationService {
             client.execute(post);
         } catch (IOException e) {
             throw new NotificationFailedException("Sending notification to Hubot at " + hubotUrl + " failed.", e);
+        } finally {
+            try {
+                client.close();
+            } catch (IOException e) {
+                throw new NotificationFailedException("Sending notification to Hubot at " + hubotUrl + " failed.", e);
+            }
         }
     }
-    
+
     @Override
-    public boolean canHandle(SubscriptionType subscriptionType) {
+    public boolean canHandle(final SubscriptionType subscriptionType) {
         return subscriptionType == SubscriptionType.HUBOT;
     }
-    
+
 }

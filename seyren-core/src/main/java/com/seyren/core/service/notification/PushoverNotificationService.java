@@ -13,7 +13,7 @@
  */
 package com.seyren.core.service.notification;
 
-import static java.lang.String.*;
+import static java.lang.String.format;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -24,10 +24,9 @@ import javax.inject.Named;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.http.NameValuePair;
-import org.apache.http.client.HttpClient;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpPost;
-import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.message.BasicNameValuePair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,12 +46,13 @@ public class PushoverNotificationService implements NotificationService {
     private final SeyrenConfig seyrenConfig;
 
     @Inject
-    public PushoverNotificationService(SeyrenConfig seyrenConfig) {
+    public PushoverNotificationService(final SeyrenConfig seyrenConfig) {
         this.seyrenConfig = seyrenConfig;
     }
 
     @Override
-    public void sendNotification(Check check, Subscription subscription, List<Alert> alerts) throws NotificationFailedException {
+    public void sendNotification(final Check check, final Subscription subscription, final List<Alert> alerts)
+            throws NotificationFailedException {
         String pushoverAppApiToken = StringUtils.trimToNull(seyrenConfig.getPushoverAppApiToken());
         String pushoverUserKey = StringUtils.trimToNull(subscription.getTarget());
         String pushoverMsgTitle = formatMsgTitle(check);
@@ -64,14 +64,14 @@ public class PushoverNotificationService implements NotificationService {
             return;
         }
 
-        if ( pushoverUserKey == null || pushoverUserKey.length() != 30 ) {
+        if (pushoverUserKey == null || pushoverUserKey.length() != 30) {
             LOGGER.warn("Invalid or missing Pushover user key");
             return;
         }
 
-
-        HttpClient client = new DefaultHttpClient();
         HttpPost post = new HttpPost("https://api.pushover.net/1/messages.json");
+
+        CloseableHttpClient client = CommonNotificationUtils.getHttpClient(seyrenConfig);
 
         try {
             List<NameValuePair> nameValuePairs = new ArrayList<NameValuePair>(1);
@@ -85,10 +85,16 @@ public class PushoverNotificationService implements NotificationService {
             client.execute(post);
         } catch (IOException e) {
             throw new NotificationFailedException("Sending notification to Pushover failed.", e);
+        } finally {
+            try {
+                client.close();
+            } catch (IOException e) {
+                throw new NotificationFailedException("Sending notification to Pushover failed.", e);
+            }
         }
     }
 
-    private String formatMsgTitle(Check check) {
+    private String formatMsgTitle(final Check check) {
         if (check.getState() == AlertType.ERROR) {
             return format("[CRIT] %s", check.getName());
         }
@@ -103,7 +109,7 @@ public class PushoverNotificationService implements NotificationService {
         return "";
     }
 
-    private String getMsgPriority(Check check) {
+    private String getMsgPriority(final Check check) {
         if (check.getState() == AlertType.WARN || check.getState() == AlertType.ERROR) {
             return "1";
         } else {
@@ -112,7 +118,7 @@ public class PushoverNotificationService implements NotificationService {
     }
 
     @Override
-    public boolean canHandle(SubscriptionType subscriptionType) {
+    public boolean canHandle(final SubscriptionType subscriptionType) {
         return subscriptionType == SubscriptionType.PUSHOVER;
     }
 }

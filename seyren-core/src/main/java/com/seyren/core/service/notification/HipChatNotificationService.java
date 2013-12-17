@@ -13,16 +13,16 @@
  */
 package com.seyren.core.service.notification;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 import javax.inject.Inject;
 import javax.inject.Named;
 
-import org.apache.http.client.HttpClient;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpPost;
-import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.message.BasicNameValuePair;
 import org.slf4j.LoggerFactory;
 
@@ -36,25 +36,26 @@ import com.seyren.core.util.config.SeyrenConfig;
 
 @Named
 public class HipChatNotificationService implements NotificationService {
-    
+
     private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger(HipChatNotificationService.class);
-    
+
     private final SeyrenConfig seyrenConfig;
     private final String baseUrl;
-    
+
     @Inject
-    public HipChatNotificationService(SeyrenConfig seyrenConfig) {
+    public HipChatNotificationService(final SeyrenConfig seyrenConfig) {
         this.seyrenConfig = seyrenConfig;
         this.baseUrl = "https://api.hipchat.com";
     }
-    
-    protected HipChatNotificationService(SeyrenConfig seyrenConfig, String baseUrl) {
+
+    protected HipChatNotificationService(final SeyrenConfig seyrenConfig, final String baseUrl) {
         this.seyrenConfig = seyrenConfig;
         this.baseUrl = baseUrl;
     }
-    
+
     @Override
-    public void sendNotification(Check check, Subscription subscription, List<Alert> alerts) throws NotificationFailedException {
+    public void sendNotification(final Check check, final Subscription subscription, final List<Alert> alerts)
+            throws NotificationFailedException {
         String token = seyrenConfig.getHipChatAuthToken();
         String from = seyrenConfig.getHipChatUsername();
         String[] roomIds = subscription.getTarget().split(",");
@@ -75,19 +76,21 @@ public class HipChatNotificationService implements NotificationService {
             throw new NotificationFailedException("Failed to send notification to HipChat", e);
         }
     }
-    
-    private String getHipChatMessage(Check check) {
-        String message = "Check <a href=" + seyrenConfig.getBaseUrl() + "/#/checks/" + check.getId() + ">" + check.getName() + "</a> has entered its " + check.getState().toString() + " state.";
+
+    private String getHipChatMessage(final Check check) {
+        String message = "Check <a href=" + seyrenConfig.getBaseUrl() + "/#/checks/" + check.getId() + ">"
+                + check.getName() + "</a> has entered its " + check.getState().toString() + " state.";
         return message;
     }
-    
-    private void sendMessage(String message, MessageColor color, String[] roomIds, String from, String authToken, boolean notify) {
+
+    private void sendMessage(final String message, final MessageColor color, final String[] roomIds, final String from,
+            final String authToken, final boolean notify) {
         for (String roomId : roomIds) {
             LOGGER.info("Posting: {} to {}: {} {}", from, roomId, message, color);
-            HttpClient client = new DefaultHttpClient();
+            CloseableHttpClient client = CommonNotificationUtils.getHttpClient(seyrenConfig);
             String url = baseUrl + "/v1/rooms/message";
             HttpPost post = new HttpPost(url);
-            
+
             try {
                 List<BasicNameValuePair> parameters = new ArrayList<BasicNameValuePair>();
                 parameters.add(new BasicNameValuePair("auth_token", authToken));
@@ -104,15 +107,20 @@ public class HipChatNotificationService implements NotificationService {
                 LOGGER.warn("Error posting to HipChat", e);
             } finally {
                 post.releaseConnection();
+                try {
+                    client.close();
+                } catch (IOException e) {
+                    throw new NotificationFailedException("Error posting to HipChat", e);
+                }
             }
         }
     }
-    
+
     @Override
-    public boolean canHandle(SubscriptionType subscriptionType) {
+    public boolean canHandle(final SubscriptionType subscriptionType) {
         return subscriptionType == SubscriptionType.HIPCHAT;
     }
-    
+
     private enum MessageColor {
         YELLOW, RED, GREEN, PURPLE, RANDOM;
     }

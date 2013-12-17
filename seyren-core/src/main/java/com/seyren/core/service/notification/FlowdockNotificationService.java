@@ -13,9 +13,10 @@
  */
 package com.seyren.core.service.notification;
 
-import static com.google.common.collect.Iterables.*;
-import static org.apache.http.entity.ContentType.*;
+import static com.google.common.collect.Iterables.transform;
+import static org.apache.http.entity.ContentType.APPLICATION_JSON;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,10 +25,9 @@ import javax.inject.Inject;
 import javax.inject.Named;
 
 import org.apache.commons.lang.StringEscapeUtils;
-import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
-import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.impl.client.CloseableHttpClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,45 +48,46 @@ import com.seyren.core.util.config.SeyrenConfig;
 @Named
 public class FlowdockNotificationService implements NotificationService {
     private static final Logger LOGGER = LoggerFactory.getLogger(FlowdockNotificationService.class);
-    
+
     private final SeyrenConfig seyrenConfig;
     private final String baseUrl;
-    
+
     @Inject
-    public FlowdockNotificationService(SeyrenConfig seyrenConfig) {
+    public FlowdockNotificationService(final SeyrenConfig seyrenConfig) {
         this.seyrenConfig = seyrenConfig;
         this.baseUrl = "https://api.flowdock.com";
     }
-    
-    protected FlowdockNotificationService(SeyrenConfig seyrenConfig, String baseUrl) {
+
+    protected FlowdockNotificationService(final SeyrenConfig seyrenConfig, final String baseUrl) {
         this.seyrenConfig = seyrenConfig;
         this.baseUrl = baseUrl;
     }
-    
+
     @Override
-    public void sendNotification(Check check, Subscription subscription, List<Alert> alerts) throws NotificationFailedException {
+    public void sendNotification(final Check check, final Subscription subscription, final List<Alert> alerts)
+            throws NotificationFailedException {
         String token = subscription.getTarget();
         String externalUsername = seyrenConfig.getFlowdockExternalUsername();
-        
+
         List<String> tags = Lists.newArrayList(
                 Splitter.on(',').omitEmptyStrings().trimResults().split(seyrenConfig.getFlowdockTags())
                 );
         List<String> emojis = Lists.newArrayList(
                 Splitter.on(',').omitEmptyStrings().trimResults().split(seyrenConfig.getFlowdockEmojis())
                 );
-        
+
         String url = String.format("%s/v1/messages/chat/%s", baseUrl, token);
-        HttpClient client = new DefaultHttpClient();
+        CloseableHttpClient client = CommonNotificationUtils.getHttpClient(seyrenConfig);
         HttpPost post = new HttpPost(url);
         post.addHeader("Content-Type", "application/json");
         post.addHeader("accept", "application/json");
-        
+
         ObjectMapper mapper = new ObjectMapper();
         Map<String, Object> dataToSend = new HashMap<String, Object>();
         dataToSend.put("content", formatContent(emojis, check, subscription, alerts));
         dataToSend.put("external_user_name", externalUsername);
         dataToSend.put("tags", formatTags(tags, check, subscription, alerts));
-        
+
         try {
             String data = StringEscapeUtils.unescapeJava(mapper.writeValueAsString(dataToSend));
             post.setEntity(new StringEntity(data, APPLICATION_JSON));
@@ -95,20 +96,26 @@ public class FlowdockNotificationService implements NotificationService {
             LOGGER.warn("Error posting to Flowdock", e);
         } finally {
             post.releaseConnection();
+            try {
+                client.close();
+            } catch (IOException e) {
+                throw new NotificationFailedException("Error posting to Flowdock", e);
+            }
         }
-        
+
     }
-    
+
     @Override
-    public boolean canHandle(SubscriptionType subscriptionType) {
+    public boolean canHandle(final SubscriptionType subscriptionType) {
         return subscriptionType == SubscriptionType.FLOWDOCK;
     }
-    
-    private String formatContent(List<String> emojis, Check check, Subscription subscription, List<Alert> alerts) {
+
+    private String formatContent(final List<String> emojis, final Check check, final Subscription subscription,
+            final List<Alert> alerts) {
         String url = String.format("%s/#/checks/%s", seyrenConfig.getBaseUrl(), check.getId());
         String alertsString = Joiner.on(", ").join(transform(alerts, new Function<Alert, String>() {
             @Override
-            public String apply(Alert input) {
+            public String apply(final Alert input) {
                 return String.format("%s: %s", input.getTarget(), input.getValue().toString());
             }
         }));
@@ -121,8 +128,9 @@ public class FlowdockNotificationService implements NotificationService {
                 url
                 );
     }
-    
-    private ImmutableList<Object> formatTags(List<String> tags, Check check, Subscription subscription, List<Alert> alerts) {
+
+    private ImmutableList<Object> formatTags(final List<String> tags, final Check check,
+            final Subscription subscription, final List<Alert> alerts) {
         return ImmutableList.builder().add(check.getState().toString()).addAll(tags).build();
     }
 }
