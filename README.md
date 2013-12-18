@@ -70,6 +70,16 @@ open http://localhost:8080
 * `GRAPHITE_CARBON_PICKLE_ENABLE` - Enable a TCP server to listen Carbon relay [pickle protocol](http://graphite.readthedocs.org/en/latest/feeding-carbon.html). Default: `false`
 * `GRAPHITE_CARBON_PICKLE_PORT` - The TCP server port. Default: `2004`
 
+#### [HTTP Proxy]
+'PROXY_PASSWORD' - The proxy password
+'PROXY_PORT' - The proxy port
+'PROXY_URL' - The proxy URL
+'PROXY_USERNAME' - The proxy username
+
+#### [Read from properties file]
+All properties kan be loaded from a property file.
+See the seyrenconfig.properties.
+
 ###Cloud Formation
 
 If you are running on amazon infrastructure use this [Cloud Formation Template](https://gist.github.com/5922231) to bring up a single instance of any size. All the environment variables required for Seyren are specified as properties to the cloud formation template and a fully configured Seyren instance should come up with no other intervention.
