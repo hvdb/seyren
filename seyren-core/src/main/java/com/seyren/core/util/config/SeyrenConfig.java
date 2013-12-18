@@ -13,10 +13,14 @@
  */
 package com.seyren.core.util.config;
 
-import static org.apache.commons.lang.StringUtils.*;
+import static org.apache.commons.lang.StringUtils.isNotEmpty;
+import static org.apache.commons.lang.StringUtils.stripEnd;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Properties;
 
 import javax.annotation.PostConstruct;
 import javax.inject.Named;
@@ -30,7 +34,7 @@ import com.seyren.core.util.velocity.Slf4jLogChute;
 
 @Named
 public class SeyrenConfig {
-    
+
     private static final String DEFAULT_BASE_URL = "http://localhost:8080/seyren";
 
     private final String baseUrl;
@@ -64,13 +68,23 @@ public class SeyrenConfig {
     private final String ircCatHost;
     private final String ircCatPort;
     private final String pushoverAppApiToken;
+    private final String proxyUsername;
+    private final String proxyPassword;
+    private final String proxyUrl;
+    private final Integer proxyPort;
+    private final String propertiesFileName;
+    private final static Properties properties = new Properties();
 
     public SeyrenConfig() {
-        
+
+        this.propertiesFileName = configOrDefault("PROPERTY_FILENAME", "seyrenconfig.properties");
+
+        readPropertyFile();
+
         // Base
         this.baseUrl = stripEnd(configOrDefault("SEYREN_URL", DEFAULT_BASE_URL), "/");
         this.mongoUrl = configOrDefault("MONGO_URL", "mongodb://localhost:27017/seyren");
-        
+
         // Graphite
         this.graphiteUrl = stripEnd(configOrDefault("GRAPHITE_URL", "http://localhost:80"), "/");
         this.graphiteUsername = configOrDefault("GRAPHITE_USERNAME", "");
@@ -80,7 +94,7 @@ public class SeyrenConfig {
         this.graphiteTrustStore = configOrDefault("GRAPHITE_TRUSTSTORE", "");
         this.graphiteCarbonPickleEnable = configOrDefault("GRAPHITE_CARBON_PICKLE_ENABLE", "false");
         this.graphiteCarbonPicklePort = configOrDefault("GRAPHITE_CARBON_PICKLE_PORT", "2004");
-        
+
         // SMTP
         this.smtpFrom = configOrDefault(list("SMTP_FROM", "SEYREN_FROM_EMAIL"), "alert@seyren");
         this.smtpUsername = configOrDefault("SMTP_USERNAME", "");
@@ -88,20 +102,20 @@ public class SeyrenConfig {
         this.smtpHost = configOrDefault("SMTP_HOST", "localhost");
         this.smtpProtocol = configOrDefault("SMTP_PROTOCOL", "smtp");
         this.smtpPort = Integer.parseInt(configOrDefault("SMTP_PORT", "25"));
-        
+
         // HipChat
         this.hipChatAuthToken = configOrDefault(list("HIPCHAT_AUTHTOKEN", "HIPCHAT_AUTH_TOKEN"), "");
         this.hipChatUsername = configOrDefault(list("HIPCHAT_USERNAME", "HIPCHAT_USER_NAME"), "Seyren Alert");
-        
+
         // PagerDuty
         this.pagerDutyDomain = configOrDefault("PAGERDUTY_DOMAIN", "");
         this.pagerDutyToken = configOrDefault("PAGERDUTY_TOKEN", "");
         this.pagerDutyUsername = configOrDefault("PAGERDUTY_USERNAME", "");
         this.pagerDutyPassword = configOrDefault("PAGERDUTY_PASSWORD", "");
-        
+
         // Hubot
         this.hubotUrl = configOrDefault(list("HUBOT_URL", "SEYREN_HUBOT_URL"), "");
-        
+
         // Flowdock
         this.flowdockExternalUsername = configOrDefault("FLOWDOCK_EXTERNAL_USERNAME", "Seyren");
         this.flowdockTags = configOrDefault("FLOWDOCK_TAGS", "");
@@ -113,14 +127,21 @@ public class SeyrenConfig {
 
         // PushOver
         this.pushoverAppApiToken = configOrDefault("PUSHOVER_APP_API_TOKEN", "");
+
+        // Http Proxy
+        this.proxyPassword = configOrDefault("PROXY_PASSWORD", "");
+        this.proxyPort = Integer.parseInt(configOrDefault("PROXY_PORT", "0000"));
+        this.proxyUrl = configOrDefault("PROXY_URL", "");
+        this.proxyUsername = configOrDefault("PROXY_USERNAME", "");
+
     }
-    
+
     @PostConstruct
     public void init() {
         Velocity.setProperty(RuntimeConstants.RUNTIME_LOG_LOGSYSTEM, new Slf4jLogChute());
         Velocity.init();
     }
-    
+
     public String getBaseUrl() {
         return baseUrl;
     }
@@ -129,57 +150,57 @@ public class SeyrenConfig {
     public boolean isBaseUrlSetToDefault() {
         return getBaseUrl().equals(DEFAULT_BASE_URL);
     }
-    
+
     @JsonIgnore
     public String getMongoUrl() {
         return mongoUrl;
     }
-    
+
     @JsonIgnore
     public String getPagerDutyDomain() {
         return pagerDutyDomain;
     }
-    
+
     @JsonIgnore
     public String getPagerDutyToken() {
         return pagerDutyToken;
     }
-    
+
     @JsonIgnore
     public String getPagerDutyUsername() {
         return pagerDutyUsername;
     }
-    
+
     @JsonIgnore
     public String getPagerDutyPassword() {
         return pagerDutyPassword;
     }
-    
+
     @JsonIgnore
     public String getHipChatAuthToken() {
         return hipChatAuthToken;
     }
-    
+
     @JsonIgnore
     public String getHipChatUsername() {
         return hipChatUsername;
     }
-    
+
     @JsonIgnore
     public String getHubotUrl() {
         return hubotUrl;
     }
-    
+
     @JsonIgnore
     public String getFlowdockExternalUsername() {
         return flowdockExternalUsername;
     }
-    
+
     @JsonIgnore
     public String getFlowdockTags() {
         return flowdockTags;
     }
-    
+
     @JsonIgnore
     public String getFlowdockEmojis() {
         return flowdockEmojis;
@@ -204,72 +225,72 @@ public class SeyrenConfig {
     public String getSmtpFrom() {
         return smtpFrom;
     }
-    
+
     @JsonIgnore
     public String getSmtpUsername() {
         return smtpUsername;
     }
-    
+
     @JsonIgnore
     public String getSmtpPassword() {
         return smtpPassword;
     }
-    
+
     @JsonIgnore
     public String getSmtpHost() {
         return smtpHost;
     }
-    
+
     @JsonIgnore
     public String getSmtpProtocol() {
         return smtpProtocol;
     }
-    
+
     @JsonIgnore
     public Integer getSmtpPort() {
         return smtpPort;
     }
-    
+
     @JsonIgnore
     public String getGraphiteUrl() {
         return graphiteUrl;
     }
-    
+
     @JsonIgnore
     public String getGraphiteUsername() {
         return graphiteUsername;
     }
-    
+
     @JsonIgnore
     public String getGraphitePassword() {
         return graphitePassword;
     }
-    
+
     @JsonIgnore
     public String getGraphiteScheme() {
         return splitBaseUrl(graphiteUrl)[0];
     }
-    
+
     @JsonIgnore
     public int getGraphiteSSLPort() {
         return Integer.valueOf(splitBaseUrl(graphiteUrl)[1]);
     }
-    
+
     @JsonIgnore
     public String getGraphiteHost() {
         return splitBaseUrl(graphiteUrl)[2];
     }
-    
+
     @JsonIgnore
     public String getGraphitePath() {
         return splitBaseUrl(graphiteUrl)[3];
     }
-    
+
     @JsonIgnore
     public String getGraphiteKeyStore() {
         return graphiteKeyStore;
     }
-    
+
     @JsonIgnore
     public String getGraphiteKeyStorePassword() {
         return graphiteKeyStorePassword;
@@ -290,48 +311,94 @@ public class SeyrenConfig {
         return Boolean.valueOf(graphiteCarbonPickleEnable);
     }
 
-    private static String configOrDefault(String propertyName, String defaultValue) {
+    @JsonIgnore
+    public final String getProxyUsername() {
+        return proxyUsername;
+    }
+
+    @JsonIgnore
+    public final String getProxyPassword() {
+        return proxyPassword;
+    }
+
+    @JsonIgnore
+    public final String getProxyUrl() {
+        return proxyUrl;
+    }
+
+    @JsonIgnore
+    public final Integer getProxyPort() {
+        return proxyPort;
+    }
+
+    @JsonIgnore
+    public String getPropertiesFileName() {
+        return propertiesFileName;
+    }
+
+    private static String configOrDefault(final String propertyName, final String defaultValue) {
         return configOrDefault(list(propertyName), defaultValue);
     }
-    
-    private static String configOrDefault(List<String> propertyNames, String defaultValue) {
-        
+
+    private static String configOrDefault(final List<String> propertyNames, final String defaultValue) {
+
         for (String propertyName : propertyNames) {
-            
+
             String value = System.getProperty(propertyName);
             if (isNotEmpty(value)) {
                 return value;
             }
-            
+
             value = System.getenv(propertyName);
             if (isNotEmpty(value)) {
                 return value;
             }
+
+            value = getValueFromProperties(propertyName);
+            if (isNotEmpty(value)) {
+                return value;
+            }
         }
-        
+
         return defaultValue;
     }
-    
-    private static List<String> list(String... propertyNames) {
+
+    private static String getValueFromProperties(final String propertyName) {
+        return properties.getProperty(propertyName);
+    }
+
+    private void readPropertyFile() {
+        InputStream stream = this.getClass()
+                .getResourceAsStream(propertiesFileName);
+        if (stream != null) {
+            try {
+                properties.load(stream);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private static List<String> list(final String... propertyNames) {
         return Arrays.asList(propertyNames);
     }
-    
+
     private static String[] splitBaseUrl(String baseUrl) {
         String[] baseParts = new String[4];
-        
+
         if (baseUrl.toString().contains("://")) {
             baseParts[0] = baseUrl.toString().split("://")[0];
             baseUrl = baseUrl.toString().split("://")[1];
         } else {
             baseParts[0] = "http";
         }
-        
+
         if (baseUrl.contains(":")) {
             baseParts[1] = baseUrl.split(":")[1];
         } else {
             baseParts[1] = "443";
         }
-        
+
         if (baseUrl.contains("/")) {
             baseParts[2] = baseUrl.split("/")[0];
             baseParts[3] = "/" + baseUrl.split("/", 2)[1];
@@ -339,7 +406,8 @@ public class SeyrenConfig {
             baseParts[2] = baseUrl;
             baseParts[3] = "";
         }
-        
+
         return baseParts;
     }
+
 }
